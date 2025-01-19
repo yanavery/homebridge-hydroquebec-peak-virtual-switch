@@ -1,19 +1,19 @@
 {
-  "name": "homebridge-plugin-name",
-  "displayName": "Plugin Name",
+  "name": "homebridge-hydroquebec-peak-virtual-switch",
+  "displayName": "Hydro-Quebec Peak Virtual Switch",
   "type": "module",
-  "version": "1.0.0",
-  "private": true,
-  "description": "A short description about what your plugin does.",
-  "author": "Your Name",
+  "version": "0.0.3",
+  "private": false,
+  "description": "Virtual Switch that turns ON and OFF based on Hydro-Quebec Peak Hours",
+  "author": "Yan Avery",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/USERNAME/GITHUB_PROJECT_NAME#readme",
+  "homepage": "https://github.com/yanavery/homebridge-hydroquebec-peak-virtual-switch/#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME.git"
+    "url": "https://github.com/yanavery/homebridge-hydroquebec-peak-virtual-switch.git"
   },
   "bugs": {
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME/issues"
+    "url": "https://github.com/yanavery/homebridge-hydroquebec-peak-virtual-switch/issues"
   },
   "keywords": [
     "homebridge-plugin"
@@ -25,6 +25,7 @@
   },
   "scripts": {
     "build": "rimraf ./dist && tsc",
+    "local": "npm run build && node ./dist/index.js",
     "lint": "eslint . --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run build",
     "watch": "npm run build && npm link && nodemon"
@@ -33,6 +34,7 @@
     "@eslint/js": "^9.14.0",
     "@types/eslint__js": "^8.42.3",
     "@types/node": "^22.8.6",
+    "@types/node-cron": "^3.0.11",
     "eslint": "^9.14.0",
     "homebridge": "^2.0.0-beta.0",
     "nodemon": "^3.1.7",
@@ -42,6 +44,10 @@
     "typescript-eslint": "^8.12.2"
   },
   "dependencies": {
-    "homebridge-lib": "^7.1.0"
+    "homebridge-lib": "^7.1.0",
+    "moment-timezone": "^0.5.46",
+    "node-cron": "^3.0.3",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
   }
 }
