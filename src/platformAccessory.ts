@@ -2,7 +2,7 @@ import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge
 
 import type { HydroQuebecPeakVirtualSwitchPlatform } from './platform.js';
 export type { HydroQuebecIntegration } from './hydro.js';
-import { HydroQuebecIntegration } from './hydro.js';
+import { HydroQuebecIntegration, PeriodType } from './hydro.js';
 
 import cron from 'node-cron';
 
@@ -12,7 +12,7 @@ import cron from 'node-cron';
  * Each accessory may expose multiple services of different service types.
  */
 export class HydroQuebecPeakVirtualSwitchAccessory {
-  private isPrePeak: boolean = false;
+  private periodType: PeriodType;
   private service: Service;
   private hydro: HydroQuebecIntegration;
 
@@ -27,7 +27,12 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
     private readonly platform: HydroQuebecPeakVirtualSwitchPlatform,
     private readonly accessory: PlatformAccessory,
   ) {
-    this.isPrePeak = accessory.displayName.includes('Pre-Peak');
+    this.periodType =
+      accessory.displayName.includes('Pre-Pre-Peak')
+        ? PeriodType.PRE_PRE_PEAK
+        : accessory.displayName.includes('Pre-Peak')
+          ? PeriodType.PRE_PEAK
+          : PeriodType.PEAK;
 
     // set the hydro-quebec integration
     this.hydro = new HydroQuebecIntegration(this.platform.log);
@@ -50,7 +55,7 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
       .onGet(this.getOn.bind(this)); // GET - bind to the `getOn` method below
 
     // schedule state updates
-    const schedules = this.hydro.getCronSchedule(this.isPrePeak);
+    const schedules = this.hydro.getCronSchedule(this.periodType);
     schedules.forEach(schedule => {
       cron.schedule(schedule, async () => {
         try {
@@ -85,7 +90,7 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
 
   // Update the state of the switch
   async updateState() {
-    this.state.isOn = await this.hydro.getState(this.isPrePeak);
+    this.state.isOn = await this.hydro.getState(this.periodType);
     this.service
       .getCharacteristic(this.platform.Characteristic.On)
       .updateValue(this.state.isOn);

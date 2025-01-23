@@ -2,8 +2,6 @@ import { Logging } from 'homebridge';
 import { Logger } from 'pino';
 import moment from 'moment-timezone';
 
-export const PRE_PEAK_HOURS = 5;
-
 const DATE_TIME_FORMAT: string = 'YYYY-MM-DD HH:mm:ss';
 
 type HydroQuebecPeakData = {
@@ -15,6 +13,21 @@ type HydroQuebecPeakData = {
   secteurclient: string;
 }
 
+export enum PeriodType {
+  PEAK = 'PEAK',
+  PRE_PEAK = 'PRE_PEAK',
+  PRE_PRE_PEAK = 'PRE_PRE_PEAK',
+};
+
+export const PRE_PEAK_HOURS = 6;
+export const PRE_PRE_PEAK_HOURS = 9;
+
+export const periodTimeAdjustmentMap: { [key in PeriodType]: number } = {
+  [PeriodType.PEAK]:  0,
+  [PeriodType.PRE_PEAK]: PRE_PEAK_HOURS,
+  [PeriodType.PRE_PRE_PEAK]: PRE_PRE_PEAK_HOURS,
+};
+
 export class HydroQuebecIntegration {
   private log: Logging | Logger;
 
@@ -23,26 +36,39 @@ export class HydroQuebecIntegration {
   }
 
   // Extracts the CRON schedule for the pre/peak periods
-  getCronSchedule(isPrePeak: boolean): string[] {
+  getCronSchedule(periodType: PeriodType): string[] {
     // ['0 6 * * *', '0 9 * * *', '0 16 * * *', '0 20 * * *'];
     const hoursToRefreshPeak = [6, 9, 16, 20];
 
-    // ['0 1 * * *', '0 4 * * *', '0 11 * * *', '0 15 * * *']
-    const hoursToRefreshPrePeak = hoursToRefreshPeak.map(hour => hour - PRE_PEAK_HOURS);
+    // ['0 0 * * *', '0 3 * * *', '0 10 * * *', '0 14 * * *']
+    const hoursToRefreshPrePeak = hoursToRefreshPeak.map(hour => {
+      return moment().startOf('day').hour(hour).subtract(PRE_PEAK_HOURS, 'hours').hour();
+    });
 
-    return isPrePeak
-      ? hoursToRefreshPrePeak.map(hour => `0 ${hour} * * *`)
-      : hoursToRefreshPeak.map(hour => `0 ${hour} * * *`);
+    // ['0 21 * * *', '0 0 * * *', '0 7 * * *', '0 11 * * *']
+    const hoursToRefreshPrePrePeak = hoursToRefreshPeak.map(hour => {
+      return moment().startOf('day').hour(hour).subtract(PRE_PRE_PEAK_HOURS, 'hours').hour();
+    });
+
+    const cronEntries = (periodType === PeriodType.PRE_PRE_PEAK)
+      ? hoursToRefreshPrePrePeak.map(hour => `0 ${hour} * * *`)
+      : (periodType === PeriodType.PRE_PEAK)
+        ? hoursToRefreshPrePeak.map(hour => `0 ${hour} * * *`)
+        : hoursToRefreshPeak.map(hour => `0 ${hour} * * *`);
+
+    this.log.debug(`CRON entries for ${periodType} ${JSON.stringify(cronEntries)}`);
+
+    return cronEntries;
   }
 
   // Return current state (boolean) for Hydro-Quebecs' pre/peak period based on current date/time
-  async getState(isPrePeak: boolean) {
+  async getState(periodType: PeriodType) {
     try {
       const url = this.createURL();
       const response = await this.json(url);
       this.log.debug(`Raw data received from HQ: ${JSON.stringify(response)}`);
 
-      return this.isCurrentlyWithinPeriod(response, isPrePeak);
+      return this.isCurrentlyWithinPeriod(response, periodType);
     } catch (e) {
       this.log.error('error retrieving state', e);
       return false;
@@ -73,25 +99,25 @@ export class HydroQuebecIntegration {
   }
 
   // Extract JSON data from Hydro-Quebec API response
-  async isCurrentlyWithinPeriod(json: {results: HydroQuebecPeakData[]}, isPrePeak: boolean) {
+  async isCurrentlyWithinPeriod(json: {results: HydroQuebecPeakData[]}, periodType: PeriodType) {
     const now = moment();
 
     if (json && json.results && json.results.length > 0) {
       for (const item of json.results) {
         let start = moment(item.datedebut);
-        start = isPrePeak ? start.subtract(PRE_PEAK_HOURS, 'hours') : start;
+        start = start.subtract(periodTimeAdjustmentMap[periodType], 'hours');
 
         let end = moment(item.datefin);
-        end = isPrePeak ? end.subtract(PRE_PEAK_HOURS, 'hours') : end;
+        end = end.subtract(periodTimeAdjustmentMap[periodType], 'hours');
 
         if (now.isBetween(start, end)) {
-          this.log.info(`Currently within Hydro-Quebec ${isPrePeak ? 'pre-peak' : 'peak'} period: ${now.format(DATE_TIME_FORMAT)}`);
+          this.log.info(`Currently within Hydro-Quebec ${periodType} period: ${now.format(DATE_TIME_FORMAT)}`);
           return true;
         }
       }
     }
 
-    this.log.info(`Currently NOT within Hydro-Quebec ${isPrePeak ? 'pre-peak' : 'peak'} period: ${now.format(DATE_TIME_FORMAT)}`);
+    this.log.info(`Currently NOT within Hydro-Quebec ${periodType} period: ${now.format(DATE_TIME_FORMAT)}`);
     return false;
   }
 }

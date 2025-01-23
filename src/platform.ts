@@ -72,6 +72,10 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
         uniqueId: 'C9851E4A-00E2-44F3-90C0-81D571E03B03',
         displayName: 'Hydro Quebec Pre-Peak Event Virtual Switch',
       },
+      {
+        uniqueId: 'C9851E4A-00E2-44F3-90C0-81D571E03B04',
+        displayName: 'Hydro Quebec Pre-Pre-Peak Event Virtual Switch',
+      },
     ];
 
     // loop over the discovered devices and register each one if it has not already been registered
