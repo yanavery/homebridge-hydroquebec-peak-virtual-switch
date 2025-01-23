@@ -13,7 +13,7 @@ export default (api: API) => {
  * For local testing of Hydro-Quebec integration outside of Homebridge
  */
 // import pino from 'pino';
-// import { HydroQuebecIntegration } from './hydro.js';
+// import { HydroQuebecIntegration, PeriodType } from './hydro.js';
 
 // async function runAppLocal() {
 //   const logger = pino({
@@ -27,8 +27,14 @@ export default (api: API) => {
 //   });
 
 //   const hydro = new HydroQuebecIntegration(logger);
-//   await hydro.getState().then((state) => {
+//   await hydro.getState(PeriodType.PEAK).then((state) => {
 //     logger.info(`Current Hydro-Quebec peak state: ${state}`);
+//   });
+//   await hydro.getState(PeriodType.PRE_PEAK).then((state) => {
+//     logger.info(`Current Hydro-Quebec pre-peak state: ${state}`);
+//   });
+//   await hydro.getState(PeriodType.PRE_PRE_PEAK).then((state) => {
+//     logger.info(`Current Hydro-Quebec pre-pre-peak state: ${state}`);
 //   });
 // }
 // await runAppLocal();

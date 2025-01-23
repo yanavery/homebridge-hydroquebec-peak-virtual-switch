@@ -55,7 +55,7 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
       .onGet(this.getOn.bind(this)); // GET - bind to the `getOn` method below
 
     // schedule state updates
-    const schedules = this.hydro.getCronSchedule(this.periodType);
+    const schedules = this.hydro.getCronSchedules();
     schedules.forEach(schedule => {
       cron.schedule(schedule, async () => {
         try {

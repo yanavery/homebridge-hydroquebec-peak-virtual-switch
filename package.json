@@ -2,7 +2,7 @@
   "name": "homebridge-hydroquebec-peak-virtual-switch",
   "displayName": "Hydro-Quebec Peak Virtual Switch",
   "type": "module",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": false,
   "description": "Virtual Switch that turns ON and OFF based on Hydro-Quebec Peak Hours",
   "author": "Yan Avery",
@@ -26,6 +26,7 @@
   "scripts": {
     "build": "rimraf ./dist && tsc",
     "local": "npm run build && node ./dist/index.js",
+    "test": "rimraf ./dist && jest",
     "lint": "eslint . --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run build",
     "watch": "npm run build && npm link && nodemon"
@@ -33,12 +34,15 @@
   "devDependencies": {
     "@eslint/js": "^9.14.0",
     "@types/eslint__js": "^8.42.3",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.8.6",
     "@types/node-cron": "^3.0.11",
     "eslint": "^9.14.0",
     "homebridge": "^2.0.0-beta.0",
+    "jest": "^29.7.0",
     "nodemon": "^3.1.7",
     "rimraf": "^6.0.1",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.12.2"
