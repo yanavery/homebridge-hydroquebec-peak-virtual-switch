@@ -2,10 +2,21 @@
 
 Hombridge Hydro-Quebec plug-in (integration) that relies on Hydro-Quebec's Open Data APIs to determine wether a peak period is currently ongoing and based on that, turns ON or OFF a HomeKit virtual switch.
 
-- **ON** -> Hydro Quebec peak period is currently ongoing
-- **OFF** -> Hydro Quebec peak period is NOT currently ongoing
+There are actually three (3) virtual switches to represent each of the following relevant periods:
+- **PEAK** -> An Hydro-Quebec peak period is actually ongoing
+- **PRE_PEAK** -> Period before Hydro-Quebec peak period (typically 0am-3am and 10am-2pm)
+- **PRE_PRE_PEAK** -> Period before pre-peak period (typically 9pm-0am and 7am-11am)
 
-With that virtual switch, you can then use HomeKit automations to turn other devices ON/OFF when this virtual switch changes state (ON/OFF), to have even more electicity savings during these peak periods.
+Switch states:
+
+- **ON** -> The given period is currently ongoing
+- **OFF** -> The given period is NOT currently ongoing
+
+At any given time, only one of the virtual switches will report **ON**, all others will be reporting **OFF**.
+
+In case of overlap, the **PEAK** switch wins over the other switches, and the **PRE_PEAK** switch wins over the **PRE_PRE_PEAK** switch.
+
+With these virtual switches, you can then use HomeKit automations to turn other devices ON/OFF when any of these virtual switches change state (ON/OFF), to have even more electicity savings during these different pre/peak periods.
 
 ## API Reference:
 
@@ -15,13 +26,20 @@ With that virtual switch, you can then use HomeKit automations to turn other dev
 
 ## Update schedule
 
-The virtual switch will update itself using the following schedule:
+All 3 virtual switches will update themselves using the following schedule:
 
 - On Homebridge plug-in startup
+- Every day at 0am EST
+- Every day at 3am EST
 - Every day at 6am EST
+- Every day at 7am EST
 - Every day at 9am EST
+- Every day at 10am EST
+- Every day at 11am EST
+- Every day at 2pm EST
 - Every day at 4pm EST
 - Every day at 8pm EST
+- Every day at 9pm EST
 
 ## Actual Hydro-Quebec API being called by the plug-in
 
