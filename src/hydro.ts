@@ -17,13 +17,29 @@ export enum PeriodType {
   PRE_PRE_PEAK = 'PRE_PRE_PEAK',
 };
 
-export const PRE_PEAK_HOURS = 6;
-export const PRE_PRE_PEAK_HOURS = 9;
+export type PeriodDefinition = {
+  begin: number;
+  end: number;
+};
 
-export const periodTimeAdjustmentMap: { [key in PeriodType]: number } = {
-  [PeriodType.PEAK]:  0,
-  [PeriodType.PRE_PEAK]: PRE_PEAK_HOURS,
-  [PeriodType.PRE_PRE_PEAK]: PRE_PRE_PEAK_HOURS,
+export const periodDefinitions: { [key in PeriodType]: PeriodDefinition[] } = {
+  // peak period
+  [PeriodType.PEAK]: [
+    { begin: 6, end: 9 },
+    { begin: 16, end: 20 },
+  ],
+
+  // 6 hours prior to peak period
+  [PeriodType.PRE_PEAK]: [
+    { begin: 0 /* 6 - 6 */, end: 3 /* 9 - 6 */ },
+    { begin: 10 /* 16 - 6 */, end: 14 /* 20 - 6 */ },
+  ],
+
+  // 9 hours prior to peak period
+  [PeriodType.PRE_PRE_PEAK]: [
+    { begin: 21 /* 6 - 9 */, end: 0 /* 9 - 9 */ },
+    { begin: 7 /* 16 - 9 */, end: 11 /* 20 - 9 */ },
+  ],
 };
 
 export interface CoreLogging {
@@ -46,24 +62,10 @@ export class HydroQuebecIntegration {
 
   // Extracts the CRON schedule for the pre/peak periods
   getCronSchedules(): string[] {
-    // ['0 6 * * *', '0 9 * * *', '0 16 * * *', '0 20 * * *'];
-    const hoursToRefreshPeak = [6, 9, 16, 20];
-
-    // ['0 0 * * *', '0 3 * * *', '0 10 * * *', '0 14 * * *']
-    const hoursToRefreshPrePeak = hoursToRefreshPeak.map(hour => {
-      return moment().startOf('day').hour(hour).subtract(PRE_PEAK_HOURS, 'hours').hour();
-    });
-
-    // ['0 21 * * *', '0 0 * * *', '0 7 * * *', '0 11 * * *']
-    const hoursToRefreshPrePrePeak = hoursToRefreshPeak.map(hour => {
-      return moment().startOf('day').hour(hour).subtract(PRE_PRE_PEAK_HOURS, 'hours').hour();
-    });
-
-    const cronEntries = [
-      ...hoursToRefreshPeak.map(hour => `0 ${hour} * * *`),
-      ...hoursToRefreshPrePeak.map(hour => `0 ${hour} * * *`),
-      ...hoursToRefreshPrePrePeak.map(hour => `0 ${hour} * * *`),
-    ];
+    // any begin or end time for any period type is a potential CRON entry
+    const cronEntries = Object.values(periodDefinitions).flatMap(periods =>
+      periods.flatMap(period => [period.begin, period.end]),
+    ).map(hour => `0 ${hour} * * *`);
 
     // remove duplicates, if any
     const uniqueCronEntries = Array.from(new Set(cronEntries));
@@ -87,7 +89,7 @@ export class HydroQuebecIntegration {
   }
 
   // Build URL to Hydro-Quebec API
-  createURL() {
+  private createURL() {
     const u = new URL('https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/evenements-pointe/records');
     u.searchParams.append('where', 'offre = "CPC-D"');
     u.searchParams.append('order_by', 'datedebut desc');
@@ -110,21 +112,18 @@ export class HydroQuebecIntegration {
   }
 
   // Extract JSON data from Hydro-Quebec API response
-  async isCurrentlyWithinPeriod(json: {results: HydroQuebecPeakData[]}, periodType: PeriodType) {
+  private async isCurrentlyWithinPeriod(json: {results: HydroQuebecPeakData[]}, periodType: PeriodType): Promise<boolean> {
     // Typical time ranges for each period:
     //
     //  PeriodType.PEAK
-    //    0 HOURS PRIOR PEAK (this is PEAK)
     //    6am - 9am (3 hours range)  <-- potential 2-hours overlap with PRE_PRE_PEAK period
     //    4pm - 8pm (4 hours range)
     //
-    //  PeriodType.PRE_PEAK
-    //    6 HOURS PRIOR PEAK
+    //  PeriodType.PRE_PEAK (6 HOURS PRIOR PEAK)
     //    12am - 6am (6 hours range)
     //    10am - 4pm (6 hours range)
     //
-    //  PeriodType.PRE_PRE_PEAK
-    //    9 HOURS PRIOR PEAK
+    //  PeriodType.PRE_PRE_PEAK (9 HOURS PRIOR PEAK)
     //    9pm - 12am (3 hours range)
     //    7am - 10am (3 hours range)  <-- potential 2-hours overlap with PEAK period
     //
@@ -132,18 +131,12 @@ export class HydroQuebecIntegration {
     const now = moment();
 
     if (json && json.results && json.results.length > 0) {
-      for (const item of json.results) {
-        let start = moment(item.datedebut);
-        start = start.subtract(periodTimeAdjustmentMap[periodType], 'hours');
-
-        let end = moment(item.datefin);
-        end = end.subtract(periodTimeAdjustmentMap[periodType], 'hours');
-
-        if (now.isBetween(start, end)) {
+      for (const hqItem of json.results) {
+        const isWithin = await this.isItemCurrentlyWithinPeriod(hqItem, periodType, now);
+        if (isWithin) {
           this.log.info(`Currently within Hydro-Quebec ${periodType} period. Basis - ` +
-            `now: ${now.format(DATE_TIME_FORMAT)}, ` +
-            `start: ${start.format(DATE_TIME_FORMAT)}, ` +
-            `end: ${end.format(DATE_TIME_FORMAT)}`);
+            `now: ${now.format(DATE_TIME_FORMAT)}`);
+
           return true;
         }
       }
@@ -151,6 +144,38 @@ export class HydroQuebecIntegration {
 
     this.log.info(`Currently NOT within Hydro-Quebec ${periodType} period. Basis - ` +
       `now: ${now.format(DATE_TIME_FORMAT)}`);
+
+    return false;
+  }
+
+  private async isItemCurrentlyWithinPeriod(hqItem: HydroQuebecPeakData, periodType: PeriodType, now: moment.Moment): Promise<boolean> {
+    // for non-peak periods, check subsequent periods to see if they are currently active
+    if (periodType === PeriodType.PRE_PEAK || periodType === PeriodType.PRE_PRE_PEAK) {
+      // check to see if PEAK period is currently active, as it trumps PRE_PEAK and PRE_PRE_PEAK period types
+      const isPeak: boolean = await this.isItemCurrentlyWithinPeriod(hqItem, PeriodType.PEAK, now);
+      if (isPeak) {
+        return false;
+      }
+      // check to see if PRE_PEAK period is currently active, as it trumps PRE_PRE_PEAK period type
+      if (periodType === PeriodType.PRE_PRE_PEAK) {
+        const isPrePeak: boolean = await this.isItemCurrentlyWithinPeriod(hqItem, PeriodType.PRE_PEAK, now);
+        if (isPrePeak) {
+          return false;
+        }
+      }
+    }
+
+    for (const period of periodDefinitions[periodType]) {
+      let begin = moment(hqItem.datedebut);
+      begin = begin.subtract(period.begin, 'hours');
+
+      let end = moment(hqItem.datefin);
+      end = end.subtract(period.end, 'hours');
+
+      if (now.isBetween(begin, end)) {
+        return true;
+      }
+    }
 
     return false;
   }
