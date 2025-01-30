@@ -188,8 +188,8 @@ export class HydroQuebecIntegration {
   getActualizedDateTime(dateTime: moment.Moment, hour: number, boundary: 'upper' | 'lower'): moment.Moment {
     const actualizedDateTime = moment(dateTime, 'America/New_York')
       .hour(hour)
-      .minute(dateTime.minute())
-      .second(dateTime.second());
+      .minute(0)
+      .second(0);
 
     if (hour === 0 && boundary === 'upper') {
       actualizedDateTime.add(1, 'day');

@@ -2,7 +2,7 @@
   "name": "homebridge-hydroquebec-peak-virtual-switch",
   "displayName": "Hydro-Quebec Peak Virtual Switch",
   "type": "module",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "private": false,
   "description": "Virtual Switch that turns ON and OFF based on Hydro-Quebec Peak Hours",
   "author": "Yan Avery",

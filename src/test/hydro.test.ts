@@ -483,4 +483,34 @@ describe('HydroQuebecIntegration', () => {
       expect(isWithinPrePrePeakPeriod).toBe(testItem.expected[PeriodType.PRE_PRE_PEAK]);
     }
   });
+
+  it('making sure non edge/boundary times are properly reported', async () => {
+    const testItems = [
+      { mockedNow: '2025-01-22T06:01-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T08:59-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T09:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: true } },
+      { mockedNow: '2025-01-22T09:59-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: true } },
+      { mockedNow: '2025-01-22T10:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T13:59-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T14:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T15:59-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T16:01-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T19:59-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T20:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+    ];
+
+    for (const testItem of testItems) {
+      const mockedNow = moment(testItem.mockedNow);
+      jest.spyOn(hydroQuebecIntegration, 'getNow').mockReturnValue(mockedNow);
+
+      const isWithinPeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PEAK);
+      expect(isWithinPeakPeriod).toBe(testItem.expected[PeriodType.PEAK]);
+
+      const isWithinPrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PEAK);
+      expect(isWithinPrePeakPeriod).toBe(testItem.expected[PeriodType.PRE_PEAK]);
+
+      const isWithinPrePrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PRE_PEAK);
+      expect(isWithinPrePrePeakPeriod).toBe(testItem.expected[PeriodType.PRE_PRE_PEAK]);
+    }
+  });
 });
