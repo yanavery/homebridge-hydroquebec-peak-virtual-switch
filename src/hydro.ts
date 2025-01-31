@@ -34,13 +34,13 @@ export const periodDefinitions: { [key in PeriodType]: PeriodDefinition[] } = {
     { begin: { hours: 16, minutes: 0 }, end: { hours: 20, minutes: 0 } }, // PM peaks
   ],
 
-  // 6 hours prior to peak period
+  // hours prior to peak period
   [PeriodType.PRE_PEAK]: [
     { begin: { hours: 0, minutes: 0 }, end: { hours: 6, minutes: 0 } }, // AM peaks
     { begin: { hours: 10, minutes: 0 }, end: { hours: 16, minutes: 0 } }, // PM peaks
   ],
 
-  // 9 hours prior to peak period
+  // hours prior to pre-peak period
   [PeriodType.PRE_PRE_PEAK]: [
     { begin: { hours: 21, minutes: 0 }, end: { hours: 0, minutes: 0 } }, // AM peaks
     { begin: { hours: 7, minutes: 0 }, end: { hours: 10, minutes: 0 } }, // PM peaks
@@ -123,8 +123,12 @@ export class HydroQuebecIntegration {
     const isWithinPeriodHolistic = this.isWithinPeriodHolistic(periodType, now);
     if (isWithinPeriodHolistic) {
       if (json && json.results && json.results.length > 0) {
-        for (const hqItem of json.results) {
-          const isWithinPeriodHqBasis = this.isWithinPeriodHqBasis(periodType, now, hqItem);
+        const allHqPeakItems = json.results;
+        for (const hqPeakItem of allHqPeakItems) {
+          const isWithinPeriodHqBasis = periodType === PeriodType.PEAK
+            ? this.isDuringHqPeak(now, hqPeakItem)
+            : this.isBeforeHqPeak(now, allHqPeakItems, periodType);
+
           if (isWithinPeriodHqBasis) {
             this.log.info(`Currently within Hydro-Quebec ${periodType} period. Basis - ` +
               `now: ${now.format(DATE_TIME_FORMAT)}`);
@@ -141,21 +145,42 @@ export class HydroQuebecIntegration {
     return false;
   }
 
-  isWithinPeriodHqBasis(periodType: PeriodType, now: moment.Moment, hqItem: HydroQuebecPeakData): boolean {
-    // only PEAK period is considered for Hydro-Quebec basis, otherwise returning `true` to skip check
-    if (periodType === PeriodType.PRE_PEAK || periodType === PeriodType.PRE_PRE_PEAK) {
-      return true;
+  isDuringHqPeak(now: moment.Moment, hqPeakItem: HydroQuebecPeakData): boolean {
+    const hqPeakBegin = moment(hqPeakItem.datedebut);
+    const hqPeakEnd = moment(hqPeakItem.datefin);
+
+    for (const peakPeriod of periodDefinitions[PeriodType.PEAK]) {
+      const peakPeriodBegin = this.getActualizedDateTime(hqPeakBegin, peakPeriod.begin, 'lower');
+      const peakPeriodEnd = this.getActualizedDateTime(hqPeakEnd, peakPeriod.end, 'upper');
+
+      if (now.isBetween(peakPeriodBegin, peakPeriodEnd, 'milliseconds', '[]')) {
+        return true;
+      }
     }
 
-    const hqBegin = moment(hqItem.datedebut);
-    const hqEnd = moment(hqItem.datefin);
+    return false;
+  }
 
-    for (const period of periodDefinitions[periodType]) {
-      const periodBegin = this.getActualizedDateTime(hqBegin, period.begin, 'lower');
-      const periodEnd = this.getActualizedDateTime(hqEnd, period.end, 'upper');
+  isBeforeHqPeak(now: moment.Moment, allHqPeakItems: HydroQuebecPeakData[], periodType: PeriodType): boolean {
+    for (const hqPeakItem of allHqPeakItems) {
+      const hqPeakBegin = moment(hqPeakItem.datedebut);
+      const hqPeakEnd = moment(hqPeakItem.datefin);
 
-      if (now.isBetween(periodBegin, periodEnd, 'milliseconds', '[]')) {
-        return true;
+      for (const peakPeriod of periodDefinitions[PeriodType.PEAK]) {
+        const peakPeriodBegin = this.getActualizedDateTime(hqPeakBegin, peakPeriod.begin, 'lower');
+        const peakPeriodEnd = this.getActualizedDateTime(hqPeakEnd, peakPeriod.end, 'upper');
+
+        for (const period of periodDefinitions[periodType]) {
+          const periodBegin = this.getActualizedDateTime(now, period.begin, 'lower');
+          const periodEnd = this.getActualizedDateTime(now, period.end, 'upper');
+
+          if (now.isBetween(periodBegin, periodEnd, 'milliseconds', '[]') &&
+            periodBegin.isBefore(peakPeriodBegin) && periodBegin.diff(peakPeriodBegin, 'hours') <= 12 &&
+            periodEnd.isBefore(peakPeriodEnd) && periodEnd.diff(peakPeriodEnd, 'hours') <= 12
+          ) {
+            return true;
+          }
+        }
       }
     }
 
