@@ -1,3 +1,4 @@
+import { setTimeout } from 'timers/promises';
 import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 
 import type { HydroQuebecPeakVirtualSwitchPlatform } from './platform.js';
@@ -59,6 +60,9 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
     schedules.forEach(schedule => {
       cron.schedule(schedule, async () => {
         try {
+          // pause for 100ms to make sure time boundaries aren't causing any conflicts between the different
+          // period types (PEAK, PRE_PEAK and PRE_PRE_PEAK) since some share their begin/end times
+          await setTimeout(100);
           await this.updateState();
         } catch (e) {
           this.platform.log.error('Error running CRON scheduled updateState()', e);

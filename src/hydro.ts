@@ -36,14 +36,14 @@ export const periodDefinitions: { [key in PeriodType]: PeriodDefinition[] } = {
 
   // 6 hours prior to peak period
   [PeriodType.PRE_PEAK]: [
-    { begin: { hours: 0, minutes: 0 }, end: { hours: 5, minutes: 59 } }, // AM peaks
-    { begin: { hours: 10, minutes: 0 }, end: { hours: 15, minutes: 59 } }, // PM peaks
+    { begin: { hours: 0, minutes: 0 }, end: { hours: 6, minutes: 0 } }, // AM peaks
+    { begin: { hours: 10, minutes: 0 }, end: { hours: 16, minutes: 0 } }, // PM peaks
   ],
 
   // 9 hours prior to peak period
   [PeriodType.PRE_PRE_PEAK]: [
-    { begin: { hours: 21, minutes: 0 }, end: { hours: 23, minutes: 59 } }, // AM peaks
-    { begin: { hours: 7, minutes: 0 }, end: { hours: 9, minutes: 59 } }, // PM peaks
+    { begin: { hours: 21, minutes: 0 }, end: { hours: 0, minutes: 0 } }, // AM peaks
+    { begin: { hours: 7, minutes: 0 }, end: { hours: 10, minutes: 0 } }, // PM peaks
   ],
 };
 
@@ -154,7 +154,7 @@ export class HydroQuebecIntegration {
       const periodBegin = this.getActualizedDateTime(hqBegin, period.begin, 'lower');
       const periodEnd = this.getActualizedDateTime(hqEnd, period.end, 'upper');
 
-      if (now.isBetween(periodBegin, periodEnd, 'seconds', '[]')) {
+      if (now.isBetween(periodBegin, periodEnd, 'milliseconds', '[]')) {
         return true;
       }
     }
@@ -182,7 +182,7 @@ export class HydroQuebecIntegration {
       const periodBegin = this.getActualizedDateTime(now, period.begin, 'lower');
       const periodEnd = this.getActualizedDateTime(now, period.end, 'upper');
 
-      if (now.isBetween(periodBegin, periodEnd, 'seconds', '[]')) {
+      if (now.isBetween(periodBegin, periodEnd, 'milliseconds', '[]')) {
         return true;
       }
     }
@@ -194,7 +194,8 @@ export class HydroQuebecIntegration {
     const actualizedDateTime = moment(dateTime, 'America/New_York')
       .hour(time.hours)
       .minute(time.minutes)
-      .second(0);
+      .second(0)
+      .millisecond(0);
 
     if (time.hours === 0 && time.minutes === 0 && boundary === 'upper') {
       actualizedDateTime.add(1, 'day');

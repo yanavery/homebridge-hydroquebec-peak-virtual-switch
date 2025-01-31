@@ -62,8 +62,8 @@ describe('HydroQuebecIntegration', () => {
   it('should return unique cron schedules', () => {
     const expectedCronEntries = [
       '0 6 * * *', '0 9 * * *', '0 16 * * *', '0 20 * * *',
-      '0 0 * * *', '59 5 * * *', '0 10 * * *', '59 15 * * *',
-      '0 21 * * *', '59 23 * * *', '0 7 * * *', '59 9 * * *',
+      '0 0 * * *', /*'0 6 * * *',*/ '0 10 * * *', /*'0 16 * * *',*/
+      '0 21 * * *', /*'0 0 * * *',*/ '0 7 * * *', /*'0 10 * * *',*/
     ];
 
     const cronSchedules = hydroQuebecIntegration.getCronSchedules();
@@ -502,6 +502,37 @@ describe('HydroQuebecIntegration', () => {
       { mockedNow: '2025-01-22T19:59-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T20:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T20:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+    ];
+
+    for (const testItem of testItems) {
+      const mockedNow = moment(testItem.mockedNow);
+      jest.spyOn(hydroQuebecIntegration, 'getNow').mockReturnValue(mockedNow);
+
+      const isWithinPeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PEAK);
+      expect(isWithinPeakPeriod).toBe(testItem.expected[PeriodType.PEAK]);
+
+      const isWithinPrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PEAK);
+      expect(isWithinPrePeakPeriod).toBe(testItem.expected[PeriodType.PRE_PEAK]);
+
+      const isWithinPrePrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PRE_PEAK);
+      expect(isWithinPrePrePeakPeriod).toBe(testItem.expected[PeriodType.PRE_PRE_PEAK]);
+    }
+  });
+
+  it('making sure millisecond boundaries are properly observed', async () => {
+    const testItems = [
+      { mockedNow: '2025-01-22T05:59:59.000-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T05:59:59.001-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T05:59:59.999-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T06:00:00.000-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T06:00:00.001-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T06:00:00.999-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T08:59:59.000-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T08:59:59.001-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T08:59:59.999-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T09:00:00.000-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T09:00:00.001-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: true } },
+      { mockedNow: '2025-01-22T09:00:00.999-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: true } },
     ];
 
     for (const testItem of testItems) {
