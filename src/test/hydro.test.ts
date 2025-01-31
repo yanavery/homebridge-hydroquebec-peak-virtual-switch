@@ -62,8 +62,8 @@ describe('HydroQuebecIntegration', () => {
   it('should return unique cron schedules', () => {
     const expectedCronEntries = [
       '0 6 * * *', '0 9 * * *', '0 16 * * *', '0 20 * * *',
-      '0 0 * * *', '0 3 * * *', '0 10 * * *', '0 14 * * *',
-      '0 21 * * *', '0 7 * * *', '0 11 * * *',
+      '0 0 * * *', '59 5 * * *', '0 10 * * *', '59 15 * * *',
+      '0 21 * * *', '59 23 * * *', '0 7 * * *', '59 9 * * *',
     ];
 
     const cronSchedules = hydroQuebecIntegration.getCronSchedules();
@@ -152,7 +152,7 @@ describe('HydroQuebecIntegration', () => {
     ];
 
     for (const item of dataUnderTest) {
-      const output = hydroQuebecIntegration.getActualizedDateTime(moment(item.inputDate), item.hour, 'lower');
+      const output = hydroQuebecIntegration.getActualizedDateTime(moment(item.inputDate), { hours: item.hour, minutes: 0 }, 'lower');
       expect(output.toISOString()).toEqual(item.expectedOutput.toISOString());
     }
   });
@@ -239,7 +239,7 @@ describe('HydroQuebecIntegration', () => {
     ];
 
     for (const item of dataUnderTest) {
-      const output = hydroQuebecIntegration.getActualizedDateTime(moment(item.inputDate), item.hour, 'upper');
+      const output = hydroQuebecIntegration.getActualizedDateTime(moment(item.inputDate), { hours: item.hour, minutes: 0 }, 'upper');
       expect(output.toISOString()).toEqual(item.expectedOutput.toISOString());
     }
   });
@@ -336,14 +336,14 @@ describe('HydroQuebecIntegration', () => {
     expect(isWithinPeakPeriod).toBe(false);
 
     const isWithinPrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PEAK);
-    expect(isWithinPrePeakPeriod).toBe(false);
+    expect(isWithinPrePeakPeriod).toBe(true);
 
     const isWithinPrePrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PRE_PEAK);
     expect(isWithinPrePrePeakPeriod).toBe(false);
   });
 
   it('making sure PEAK period is properly reported - negative use case AFTER AM', async () => {
-    const mockedNow = moment('2025-01-21T10:00:00-05:00'); // 1/20 @ 10am EST
+    const mockedNow = moment('2025-01-21T10:00:00-05:00'); // 1/21 @ 10am EST
     jest.spyOn(hydroQuebecIntegration, 'getNow').mockReturnValue(mockedNow);
 
     const isWithinPeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PEAK);
@@ -364,7 +364,7 @@ describe('HydroQuebecIntegration', () => {
     expect(isWithinPeakPeriod).toBe(false);
 
     const isWithinPrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PEAK);
-    expect(isWithinPrePeakPeriod).toBe(false);
+    expect(isWithinPrePeakPeriod).toBe(true);
 
     const isWithinPrePrePeakPeriod = await hydroQuebecIntegration.isCurrentlyWithinPeriod(sampleData, PeriodType.PRE_PRE_PEAK);
     expect(isWithinPrePrePeakPeriod).toBe(false);
@@ -418,8 +418,8 @@ describe('HydroQuebecIntegration', () => {
     // abc 1/22 @ 1am -> PRE_PEAK
     // abc 1/22 @ 2am -> PRE_PEAK
     // abc 1/22 @ 3am -> PRE_PEAK
-    // abc 1/22 @ 4am -> NOTHING
-    // abc 1/22 @ 5am -> NOTHING
+    // abc 1/22 @ 4am -> PRE_PEAK
+    // abc 1/22 @ 5am -> PRE_PEAK
     // abc 1/22 @ 6am -> PEAK
     // abc 1/22 @ 7am -> PEAK (also overlaps with PRE_PRE_PEAK)
     // abc 1/22 @ 8am -> PEAK (also overlaps with PRE_PRE_PEAK)
@@ -429,7 +429,7 @@ describe('HydroQuebecIntegration', () => {
     // abc 1/22 @ 12pm -> PRE_PEAK
     // abc 1/22 @ 1pm -> PRE_PEAK
     // abc 1/22 @ 2pm -> PRE_PEAK
-    // abc 1/22 @ 3pm -> NOTHING
+    // abc 1/22 @ 3pm -> PRE_PEAK
     // abc 1/22 @ 4pm -> PEAK
     // abc 1/22 @ 5pm -> PEAK
     // abc 1/22 @ 6pm -> PEAK
@@ -446,8 +446,8 @@ describe('HydroQuebecIntegration', () => {
       { mockedNow: '2025-01-22T01:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T02:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T03:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
-      { mockedNow: '2025-01-22T04:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
-      { mockedNow: '2025-01-22T05:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T04:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T05:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T06:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T07:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T08:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
@@ -457,7 +457,7 @@ describe('HydroQuebecIntegration', () => {
       { mockedNow: '2025-01-22T12:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T13:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T14:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
-      { mockedNow: '2025-01-22T15:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T15:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T16:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T17:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T18:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
@@ -486,16 +486,21 @@ describe('HydroQuebecIntegration', () => {
 
   it('making sure non edge/boundary times are properly reported', async () => {
     const testItems = [
+      { mockedNow: '2025-01-22T06:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T06:01-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T08:59-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T09:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T09:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: true } },
       { mockedNow: '2025-01-22T09:59-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: true } },
+      { mockedNow: '2025-01-22T10:00-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T10:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T13:59-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
-      { mockedNow: '2025-01-22T14:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
-      { mockedNow: '2025-01-22T15:59-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T14:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T15:59-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: true, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T16:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T16:01-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T19:59-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
+      { mockedNow: '2025-01-22T20:00-05:00', expected: { [PeriodType.PEAK]: true, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
       { mockedNow: '2025-01-22T20:01-05:00', expected: { [PeriodType.PEAK]: false, [PeriodType.PRE_PEAK]: false, [PeriodType.PRE_PRE_PEAK]: false } },
     ];
 

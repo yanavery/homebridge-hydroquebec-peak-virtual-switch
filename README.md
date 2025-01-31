@@ -29,17 +29,20 @@ With these virtual switches, you can then use HomeKit automations to turn other 
 All 3 virtual switches will update themselves using the following schedule:
 
 - On Homebridge plug-in startup
-- Every day at 0am EST
-- Every day at 3am EST
-- Every day at 6am EST
-- Every day at 7am EST
-- Every day at 9am EST
-- Every day at 10am EST
-- Every day at 11am EST
-- Every day at 2pm EST
-- Every day at 4pm EST
-- Every day at 8pm EST
-- Every day at 9pm EST
+
+- Every day at 06:00 EST (peak AM begin)
+- Every day at 09:00 EST (peak AM end)
+- Every day at 00:00 EST (pre-peak AM begin)
+- Every day at 05:59 EST (pre-peak AM end)
+- Every day at 21:00 EST (pre-pre-peak AM begin)
+- Every day at 23:59 EST (pre-pre-peak AM end)
+
+- Every day at 16:00 EST (peak PM begin)
+- Every day at 20:00 EST (peak PM end)
+- Every day at 10:00 EST (pre-peak PM begin)
+- Every day at 15:59 EST (pre-peak PM end)
+- Every day at 07:00 EST (pre-pre-peak PM begin)
+- Every day at 09:59 EST (pre-pre-peak PM end)
 
 ## Actual Hydro-Quebec API being called by the plug-in
 

@@ -17,28 +17,33 @@ export enum PeriodType {
   PRE_PRE_PEAK = 'PRE_PRE_PEAK',
 };
 
+export type PeriodDefinitionTime = {
+  hours: number;
+  minutes: number;
+};
+
 export type PeriodDefinition = {
-  begin: number;
-  end: number;
+  begin: PeriodDefinitionTime;
+  end: PeriodDefinitionTime;
 };
 
 export const periodDefinitions: { [key in PeriodType]: PeriodDefinition[] } = {
   // peak period
   [PeriodType.PEAK]: [
-    { begin: 6, end: 9 },
-    { begin: 16, end: 20 },
+    { begin: { hours: 6, minutes: 0 }, end: { hours: 9, minutes: 0 } }, // AM peaks
+    { begin: { hours: 16, minutes: 0 }, end: { hours: 20, minutes: 0 } }, // PM peaks
   ],
 
   // 6 hours prior to peak period
   [PeriodType.PRE_PEAK]: [
-    { begin: 0 /* 6 - 6 */, end: 3 /* 9 - 6 */ },
-    { begin: 10 /* 16 - 6 */, end: 14 /* 20 - 6 */ },
+    { begin: { hours: 0, minutes: 0 }, end: { hours: 5, minutes: 59 } }, // AM peaks
+    { begin: { hours: 10, minutes: 0 }, end: { hours: 15, minutes: 59 } }, // PM peaks
   ],
 
   // 9 hours prior to peak period
   [PeriodType.PRE_PRE_PEAK]: [
-    { begin: 21 /* 6 - 9 */, end: 0 /* 9 - 9 */ },
-    { begin: 7 /* 16 - 9 */, end: 11 /* 20 - 9 */ },
+    { begin: { hours: 21, minutes: 0 }, end: { hours: 23, minutes: 59 } }, // AM peaks
+    { begin: { hours: 7, minutes: 0 }, end: { hours: 9, minutes: 59 } }, // PM peaks
   ],
 };
 
@@ -65,7 +70,7 @@ export class HydroQuebecIntegration {
     // any begin or end time for any period type is a potential CRON entry
     const cronEntries = Object.values(periodDefinitions).flatMap(periods =>
       periods.flatMap(period => [period.begin, period.end]),
-    ).map(hour => `0 ${hour} * * *`);
+    ).map(time => `${time.minutes} ${time.hours} * * *`);
 
     // remove duplicates, if any
     const uniqueCronEntries = Array.from(new Set(cronEntries));
@@ -185,13 +190,13 @@ export class HydroQuebecIntegration {
     return false;
   }
 
-  getActualizedDateTime(dateTime: moment.Moment, hour: number, boundary: 'upper' | 'lower'): moment.Moment {
+  getActualizedDateTime(dateTime: moment.Moment, time: PeriodDefinitionTime, boundary: 'upper' | 'lower'): moment.Moment {
     const actualizedDateTime = moment(dateTime, 'America/New_York')
-      .hour(hour)
-      .minute(0)
+      .hour(time.hours)
+      .minute(time.minutes)
       .second(0);
 
-    if (hour === 0 && boundary === 'upper') {
+    if (time.hours === 0 && time.minutes === 0 && boundary === 'upper') {
       actualizedDateTime.add(1, 'day');
     }
 
