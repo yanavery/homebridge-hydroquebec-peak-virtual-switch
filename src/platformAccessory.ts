@@ -1,11 +1,7 @@
-import { setTimeout } from 'timers/promises';
 import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 
 import type { HydroQuebecPeakVirtualSwitchPlatform } from './platform.js';
-export type { HydroQuebecIntegration } from './hydro.js';
 import { HydroQuebecIntegration, PeriodType } from './hydro.js';
-
-import cron from 'node-cron';
 
 /**
  * Platform Accessory
@@ -15,7 +11,6 @@ import cron from 'node-cron';
 export class HydroQuebecPeakVirtualSwitchAccessory {
   private periodType: PeriodType;
   private service: Service;
-  private hydro: HydroQuebecIntegration;
 
   /**
    * State tracking of the accessory
@@ -27,16 +22,9 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
   constructor(
     private readonly platform: HydroQuebecPeakVirtualSwitchPlatform,
     private readonly accessory: PlatformAccessory,
+    private readonly hydro: HydroQuebecIntegration,
   ) {
-    this.periodType =
-      accessory.displayName.includes('Pre-Pre-Peak')
-        ? PeriodType.PRE_PRE_PEAK
-        : accessory.displayName.includes('Pre-Peak')
-          ? PeriodType.PRE_PEAK
-          : PeriodType.PEAK;
-
-    // set the hydro-quebec integration
-    this.hydro = new HydroQuebecIntegration(this.platform.log);
+    this.periodType = HydroQuebecPeakVirtualSwitchAccessory.getPeriodTypeFromDisplayName(accessory.displayName);
 
     // set accessory information
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
@@ -55,25 +43,8 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
       .onSet(this.setOn.bind(this)) // SET - bind to the `setOn` method below
       .onGet(this.getOn.bind(this)); // GET - bind to the `getOn` method below
 
-    // schedule state updates
-    const schedules = this.hydro.getCronSchedules();
-    schedules.forEach(schedule => {
-      cron.schedule(schedule, async () => {
-        try {
-          // pause for 100ms to make sure time boundaries aren't causing any conflicts between the different
-          // period types (PEAK, PRE_PEAK and PRE_PRE_PEAK) since some share their begin/end times
-          await setTimeout(100);
-          await this.updateState();
-        } catch (e) {
-          this.platform.log.error('Error running CRON scheduled updateState()', e);
-        }
-      }, {
-        timezone: 'America/New_York',
-      });
-    });
-
     // initial state update on startup (not awaited, will complete in the background)
-    this.updateState();
+    this.updateState(true);
   }
 
   /**
@@ -93,10 +64,38 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
   }
 
   // Update the state of the switch
-  async updateState() {
-    this.state.isOn = await this.hydro.getState(this.periodType);
+  async updateState(init: boolean = false) {
+    const currentState = this.state.isOn;
+    const desiredState = await this.getStateHq();
+
+    if (init) {
+      this.platform.log.info(`Hydro-Quebec ${this.periodType} switch initialized to ${desiredState ? 'ON' : 'OFF'} state.`);
+    } else {
+      if (currentState === desiredState) {
+        this.platform.log.info(`Hydro-Quebec ${this.periodType} switch kept in ${desiredState ? 'ON' : 'OFF'} state.`);
+      } else {
+        this.platform.log.info(`Hydro-Quebec ${this.periodType} switch transitioned from ${currentState ? 'ON' : 'OFF'}` +
+          ` to ${desiredState ? 'ON' : 'OFF'} state.`);
+      }
+    }
+
+    this.state.isOn = desiredState;
     this.service
       .getCharacteristic(this.platform.Characteristic.On)
       .updateValue(this.state.isOn);
+  }
+
+  // Retrieves state as per Hydro-Quebec (doesn't update the device's internal state)
+  async getStateHq(): Promise<boolean> {
+    const hqState = await this.hydro.getState(this.periodType);
+    return hqState;
+  }
+
+  static getPeriodTypeFromDisplayName(displayName: string): PeriodType {
+    return displayName.includes('Pre-Pre-Peak')
+      ? PeriodType.PRE_PRE_PEAK
+      : displayName.includes('Pre-Peak')
+        ? PeriodType.PRE_PEAK
+        : PeriodType.PEAK;
   }
 }

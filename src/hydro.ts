@@ -106,7 +106,6 @@ export class HydroQuebecIntegration {
       this.log.debug(`Raw data received from HQ: ${JSON.stringify(response)}`);
 
       const state = await this.isCurrentlyWithinPeriod(response, periodType);
-      this.log.info(`Hydro-Quebec ${periodType} is ${state ? 'ON' : 'OFF'}.`);
       return state;
     } catch (e) {
       this.log.error('error retrieving state', e);

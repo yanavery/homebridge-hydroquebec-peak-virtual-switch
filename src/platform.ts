@@ -1,6 +1,8 @@
 import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
-
+import { setTimeout } from 'timers/promises';
+import cron from 'node-cron';
 import { HydroQuebecPeakVirtualSwitchAccessory } from './platformAccessory.js';
+import { HydroQuebecIntegration, PeriodType } from './hydro.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
 /**
@@ -22,6 +24,14 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public readonly CustomCharacteristics: any;
 
+  // Hydro-Quebec integration
+  private hydro: HydroQuebecIntegration;
+
+  // Peak, Pre-Peak and Pre-Pre-Peak Handlers
+  private peakHandler?: HydroQuebecPeakVirtualSwitchAccessory;
+  private prePeakHandler?: HydroQuebecPeakVirtualSwitchAccessory;
+  private prePrePeakHandler?: HydroQuebecPeakVirtualSwitchAccessory;
+
   constructor(
     public readonly log: Logging,
     public readonly config: PlatformConfig,
@@ -29,6 +39,9 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
   ) {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
+
+    // set the hydro-quebec integration
+    this.hydro = new HydroQuebecIntegration(this.log);
 
     this.log.debug('Finished initializing platform:', this.config.name);
 
@@ -40,6 +53,8 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
       log.debug('Executed didFinishLaunching callback');
       // run the method to discover / register your devices as accessories
       this.discoverDevices();
+      // setup scheduled state updates
+      this.setupCronSchedules();
     });
   }
 
@@ -88,13 +103,14 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
       // see if an accessory with the same uuid has already been registered and restored from
       // the cached devices we stored in the `configureAccessory` method above
       const existingAccessory = this.accessories.get(uuid);
+      let handler: HydroQuebecPeakVirtualSwitchAccessory;
 
       if (existingAccessory) {
         // the accessory already exists
         this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
 
         // create the accessory handler for the restored accessory
-        new HydroQuebecPeakVirtualSwitchAccessory(this, existingAccessory);
+        handler = new HydroQuebecPeakVirtualSwitchAccessory(this, existingAccessory, this.hydro);
       } else {
         // the accessory does not yet exist, so we need to create it
         this.log.info('Adding new accessory:', device.displayName);
@@ -108,10 +124,20 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
 
         // create the accessory handler for the newly create accessory
         // this is imported from `platformAccessory.ts`
-        new HydroQuebecPeakVirtualSwitchAccessory(this, accessory);
+        handler = new HydroQuebecPeakVirtualSwitchAccessory(this, accessory, this.hydro);
 
         // link the accessory to your platform
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      }
+
+      // setup device handler so it can be used from CRON events
+      const type = HydroQuebecPeakVirtualSwitchAccessory.getPeriodTypeFromDisplayName(device.displayName);
+      if (type === PeriodType.PEAK) {
+        this.peakHandler = handler;
+      } else if (type === PeriodType.PRE_PEAK) {
+        this.prePeakHandler = handler;
+      } else if (type === PeriodType.PRE_PRE_PEAK) {
+        this.prePrePeakHandler = handler;
       }
 
       // push into discoveredCacheUUIDs
@@ -126,6 +152,70 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
         this.log.info('Removing existing accessory from cache:', accessory.displayName);
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
+    }
+  }
+
+  setupCronSchedules() {
+    const schedules = this.hydro.getCronSchedules();
+    schedules.forEach(schedule => {
+      cron.schedule(schedule, async () => {
+        try {
+          await this.performScheduledAccessoriesStateUpdate();
+        } catch (e) {
+          this.log.error('Error running CRON scheduled state update', e);
+        }
+      }, {
+        timezone: 'America/New_York',
+      });
+    });
+  }
+
+  async performScheduledAccessoriesStateUpdate() : Promise<void> {
+    // pause for 10ms between each operation to make sure nothing overlaps (time wise) and not causing any conflicts between
+    // the different period types (PEAK, PRE_PEAK and PRE_PRE_PEAK) as some of the devices share their begin/end times
+    await setTimeout(10);
+
+    const peakStateHq = await this.peakHandler?.getStateHq();
+    const peakStateCurrent = await this.peakHandler?.getOn();
+
+    await setTimeout(10);
+
+    const prePeakStateHq = await this.prePeakHandler?.getStateHq();
+    const prePeakStateCurrent = await this.prePeakHandler?.getOn();
+
+    await setTimeout(10);
+
+    const prePrePeakStateHq = await this.prePrePeakHandler?.getStateHq();
+    const prePrePeakStateCurrent = await this.prePrePeakHandler?.getOn();
+
+    await setTimeout(10);
+
+    // 1st run all ON -> OFF transitions, and run them in Pre-Pre-Peak, Pre-Peak, Peak sequence
+    if (prePrePeakStateCurrent && !prePrePeakStateHq) {
+      await this.prePrePeakHandler?.updateState();
+      await setTimeout(10);
+    }
+    if (prePeakStateCurrent && !prePeakStateHq) {
+      await this.prePeakHandler?.updateState();
+      await setTimeout(10);
+    }
+    if (peakStateCurrent && !peakStateHq) {
+      await this.peakHandler?.updateState();
+      await setTimeout(10);
+    }
+
+    // 2nd run all OFF -> ON transitions, and run them in Pre-Pre-Peak, Pre-Peak, Peak sequence
+    if (!prePrePeakStateCurrent && prePrePeakStateHq) {
+      await this.prePrePeakHandler?.updateState();
+      await setTimeout(10);
+    }
+    if (!prePeakStateCurrent && prePeakStateHq) {
+      await this.prePeakHandler?.updateState();
+      await setTimeout(10);
+    }
+    if (!peakStateCurrent && peakStateHq) {
+      await this.peakHandler?.updateState();
+      await setTimeout(10);
     }
   }
 }
