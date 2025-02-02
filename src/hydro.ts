@@ -1,6 +1,14 @@
 import moment from 'moment-timezone';
 
-const DATE_TIME_FORMAT: string = 'YYYY-MM-DD HH:mm:ss';
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const APRIL = 3; // 0-based
+const DECEMBER = 11; // 0-based
+
+const SEASON_BEGIN_MONTH = DECEMBER;
+const SEASON_BEGIN_DAY = 1;
+
+const SEASON_END_MONTH = APRIL;
+const SEASON_END_DAY = 31;
 
 export type HydroQuebecPeakData = {
   offre: string;
@@ -17,12 +25,18 @@ export enum PeriodType {
   PRE_PRE_PEAK = 'PRE_PRE_PEAK',
 };
 
+export enum Schedule {
+  AM = 'AM',
+  PM = 'PM',
+};
+
 export type PeriodDefinitionTime = {
   hours: number;
   minutes: number;
 };
 
 export type PeriodDefinition = {
+  schedule: Schedule,
   begin: PeriodDefinitionTime;
   end: PeriodDefinitionTime;
 };
@@ -30,20 +44,20 @@ export type PeriodDefinition = {
 export const periodDefinitions: { [key in PeriodType]: PeriodDefinition[] } = {
   // peak period
   [PeriodType.PEAK]: [
-    { begin: { hours: 6, minutes: 0 }, end: { hours: 9, minutes: 0 } }, // AM peaks
-    { begin: { hours: 16, minutes: 0 }, end: { hours: 20, minutes: 0 } }, // PM peaks
+    { schedule: Schedule.AM, begin: { hours: 6, minutes: 0 }, end: { hours: 9, minutes: 0 } },
+    { schedule: Schedule.PM, begin: { hours: 16, minutes: 0 }, end: { hours: 20, minutes: 0 } },
   ],
 
   // hours prior to peak period
   [PeriodType.PRE_PEAK]: [
-    { begin: { hours: 0, minutes: 0 }, end: { hours: 6, minutes: 0 } }, // AM peaks
-    { begin: { hours: 10, minutes: 0 }, end: { hours: 16, minutes: 0 } }, // PM peaks
+    { schedule: Schedule.AM, begin: { hours: 0, minutes: 0 }, end: { hours: 6, minutes: 0 } },
+    { schedule: Schedule.PM, begin: { hours: 10, minutes: 0 }, end: { hours: 16, minutes: 0 } },
   ],
 
   // hours prior to pre-peak period
   [PeriodType.PRE_PRE_PEAK]: [
-    { begin: { hours: 21, minutes: 0 }, end: { hours: 0, minutes: 0 } }, // AM peaks
-    { begin: { hours: 7, minutes: 0 }, end: { hours: 10, minutes: 0 } }, // PM peaks
+    { schedule: Schedule.AM, begin: { hours: 21, minutes: 0 }, end: { hours: 0, minutes: 0 } },
+    { schedule: Schedule.PM, begin: { hours: 7, minutes: 0 }, end: { hours: 10, minutes: 0 } },
   ],
 };
 
@@ -80,13 +94,20 @@ export class HydroQuebecIntegration {
   }
 
   // Return current state (boolean) for Hydro-Quebecs' pre/peak period based on current date/time
-  async getState(periodType: PeriodType) {
+  async getState(periodType: PeriodType): Promise<boolean> {
+    if (!this.isWithinSeason()) {
+      this.log.info(`Outside of Hydro-Quebec winter credit season - ${periodType} is OFF.`);
+      return false;
+    }
+
     try {
       const url = this.createURL();
       const response = await this.json(url);
       this.log.debug(`Raw data received from HQ: ${JSON.stringify(response)}`);
 
-      return this.isCurrentlyWithinPeriod(response, periodType);
+      const state = await this.isCurrentlyWithinPeriod(response, periodType);
+      this.log.info(`Hydro-Quebec ${periodType} is ${state ? 'ON' : 'OFF'}.`);
+      return state;
     } catch (e) {
       this.log.error('error retrieving state', e);
       return false;
@@ -120,27 +141,64 @@ export class HydroQuebecIntegration {
   async isCurrentlyWithinPeriod(json: {results: HydroQuebecPeakData[]}, periodType: PeriodType): Promise<boolean> {
     const now = this.getNow();
 
-    const isWithinPeriodHolistic = this.isWithinPeriodHolistic(periodType, now);
-    if (isWithinPeriodHolistic) {
-      if (json && json.results && json.results.length > 0) {
-        const allHqPeakItems = json.results;
-        for (const hqPeakItem of allHqPeakItems) {
-          const isWithinPeriodHqBasis = periodType === PeriodType.PEAK
-            ? this.isDuringHqPeak(now, hqPeakItem)
-            : this.isBeforeHqPeak(now, allHqPeakItems, periodType);
-
-          if (isWithinPeriodHqBasis) {
-            this.log.info(`Currently within Hydro-Quebec ${periodType} period. Basis - ` +
-              `now: ${now.format(DATE_TIME_FORMAT)}`);
-
-            return true;
-          }
+    if (json && json.results && json.results.length > 0) {
+      const allHqPeakItems = json.results;
+      let isWithinPeriod = false;
+      if (periodType === PeriodType.PRE_PRE_PEAK) {
+        const isPeak = this.isDuringHqEvent(now, allHqPeakItems, PeriodType.PEAK);
+        if (isPeak) {
+          return false;
         }
+        const isPrePeak = this.isDuringHqEvent(now, allHqPeakItems, PeriodType.PRE_PEAK);
+        if (isPrePeak) {
+          return false;
+        }
+        isWithinPeriod = this.isDuringHqEvent(now, allHqPeakItems, PeriodType.PRE_PRE_PEAK);
+      } else if (periodType === PeriodType.PRE_PEAK) {
+        const isPeak = this.isDuringHqEvent(now, allHqPeakItems, PeriodType.PEAK);
+        if (isPeak) {
+          return false;
+        }
+        isWithinPeriod = this.isDuringHqEvent(now, allHqPeakItems, PeriodType.PRE_PEAK);
+      } else {
+        isWithinPeriod = this.isDuringHqEvent(now, allHqPeakItems, PeriodType.PEAK);
+      }
+
+      if (isWithinPeriod) {
+        return true;
       }
     }
 
-    this.log.info(`Currently NOT within Hydro-Quebec ${periodType} period. Basis - ` +
-      `now: ${now.format(DATE_TIME_FORMAT)}`);
+    return false;
+  }
+
+  isDuringHqEvent(now: moment.Moment, allHqPeakItems: HydroQuebecPeakData[], periodType: PeriodType): boolean {
+    for (const hqPeakItem of allHqPeakItems) {
+      if (this.isDuringHqPeak(now, hqPeakItem)) {
+        if (periodType === PeriodType.PEAK) {
+          return true;
+        } else {
+          continue;
+        }
+      }
+      const hqPeakBegin = moment(hqPeakItem.datedebut);
+      const hqPeakEnd = moment(hqPeakItem.datefin);
+      for (const period of periodDefinitions[periodType]) {
+        const periodBegin = periodType === PeriodType.PEAK
+          ? hqPeakBegin
+          : this.getActualizedDateTime(now, period.begin, 'lower');
+        const periodEnd = periodType === PeriodType.PEAK
+          ? hqPeakEnd
+          : this.getActualizedDateTime(now, period.end, 'upper');
+
+        if (now.isBetween(periodBegin, periodEnd, 'milliseconds', '[]') &&
+          periodBegin.isBefore(hqPeakBegin) && Math.abs(periodBegin.diff(hqPeakBegin, 'milliseconds')) <= TWELVE_HOURS_MS &&
+          periodEnd.isBefore(hqPeakEnd) && Math.abs(periodEnd.diff(hqPeakEnd, 'milliseconds')) <= TWELVE_HOURS_MS
+        ) {
+          return true;
+        }
+      }
+    }
 
     return false;
   }
@@ -149,70 +207,7 @@ export class HydroQuebecIntegration {
     const hqPeakBegin = moment(hqPeakItem.datedebut);
     const hqPeakEnd = moment(hqPeakItem.datefin);
 
-    for (const peakPeriod of periodDefinitions[PeriodType.PEAK]) {
-      const peakPeriodBegin = this.getActualizedDateTime(hqPeakBegin, peakPeriod.begin, 'lower');
-      const peakPeriodEnd = this.getActualizedDateTime(hqPeakEnd, peakPeriod.end, 'upper');
-
-      if (now.isBetween(peakPeriodBegin, peakPeriodEnd, 'milliseconds', '[]')) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  isBeforeHqPeak(now: moment.Moment, allHqPeakItems: HydroQuebecPeakData[], periodType: PeriodType): boolean {
-    for (const hqPeakItem of allHqPeakItems) {
-      const hqPeakBegin = moment(hqPeakItem.datedebut);
-      const hqPeakEnd = moment(hqPeakItem.datefin);
-
-      for (const peakPeriod of periodDefinitions[PeriodType.PEAK]) {
-        const peakPeriodBegin = this.getActualizedDateTime(hqPeakBegin, peakPeriod.begin, 'lower');
-        const peakPeriodEnd = this.getActualizedDateTime(hqPeakEnd, peakPeriod.end, 'upper');
-
-        for (const period of periodDefinitions[periodType]) {
-          const periodBegin = this.getActualizedDateTime(now, period.begin, 'lower');
-          const periodEnd = this.getActualizedDateTime(now, period.end, 'upper');
-
-          if (now.isBetween(periodBegin, periodEnd, 'milliseconds', '[]') &&
-            periodBegin.isBefore(peakPeriodBegin) && periodBegin.diff(peakPeriodBegin, 'hours') <= 12 &&
-            periodEnd.isBefore(peakPeriodEnd) && periodEnd.diff(peakPeriodEnd, 'hours') <= 12
-          ) {
-            return true;
-          }
-        }
-      }
-    }
-
-    return false;
-  }
-
-  isWithinPeriodHolistic(periodType: PeriodType, now: moment.Moment): boolean {
-    // check to see if within PEAK period, as it trumps PRE_PEAK & PRE_PRE_PEAK period types
-    if (periodType === PeriodType.PRE_PEAK || periodType === PeriodType.PRE_PRE_PEAK) {
-      const isPeak = this.isWithinPeriodHolistic(PeriodType.PEAK, now);
-      if (isPeak) {
-        return false;
-      }
-      // check to see if within PRE_PEAK period, as it trumps PRE_PRE_PEAK period type
-      if (periodType === PeriodType.PRE_PRE_PEAK) {
-        const isPrePeak = this.isWithinPeriodHolistic(PeriodType.PRE_PEAK, now);
-        if (isPrePeak) {
-          return false;
-        }
-      }
-    }
-
-    for (const period of periodDefinitions[periodType]) {
-      const periodBegin = this.getActualizedDateTime(now, period.begin, 'lower');
-      const periodEnd = this.getActualizedDateTime(now, period.end, 'upper');
-
-      if (now.isBetween(periodBegin, periodEnd, 'milliseconds', '[]')) {
-        return true;
-      }
-    }
-
-    return false;
+    return now.isBetween(hqPeakBegin, hqPeakEnd, 'milliseconds', '[]');
   }
 
   getActualizedDateTime(dateTime: moment.Moment, time: PeriodDefinitionTime, boundary: 'upper' | 'lower'): moment.Moment {
@@ -227,6 +222,28 @@ export class HydroQuebecIntegration {
     }
 
     return actualizedDateTime;
+  }
+
+  isWithinSeason(): boolean {
+    const now = this.getNow();
+
+    const seasonBegin = moment(now, 'America/New_York')
+      .year(now.month() >= APRIL? now.year() : now.year() - 1)
+      .month(SEASON_BEGIN_MONTH)
+      .date(SEASON_BEGIN_DAY)
+      .hour(0)
+      .minute(0)
+      .second(0);
+
+    const seasonEnd = moment(now, 'America/New_York')
+      .year(now.month() < APRIL ? now.year() : now.year() + 1)
+      .month(SEASON_END_MONTH)
+      .date(SEASON_END_DAY)
+      .hour(23)
+      .minute(59)
+      .second(59);
+
+    return now.isBetween(seasonBegin, seasonEnd, 'minutes', '[]');
   }
 
   getNow() {
