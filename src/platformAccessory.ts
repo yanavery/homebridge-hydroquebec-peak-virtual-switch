@@ -85,6 +85,10 @@ export class HydroQuebecPeakVirtualSwitchAccessory {
       .updateValue(this.state.isOn);
   }
 
+  getPeriodType() {
+    return this.periodType;
+  }
+
   // Retrieves state as per Hydro-Quebec (doesn't update the device's internal state)
   async getStateHq(): Promise<boolean> {
     const hqState = await this.hydro.getState(this.periodType);

@@ -173,6 +173,7 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
   async performScheduledAccessoriesStateUpdate() : Promise<void> {
     // pause for 10ms between each operation to make sure nothing overlaps (time wise) and not causing any conflicts between
     // the different period types (PEAK, PRE_PEAK and PRE_PRE_PEAK) as some of the devices share their begin/end times
+
     await setTimeout(10);
 
     const peakStateHq = await this.peakHandler?.getStateHq();
@@ -189,6 +190,11 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
     const prePrePeakStateCurrent = await this.prePrePeakHandler?.getOn();
 
     await setTimeout(10);
+
+    this.log.info('Hydro-Quebec virtual switches processing BEGIN - state BEFORE processing');
+    this.log.info(`Hydro-Quebec ${this.prePrePeakHandler?.getPeriodType()} state is ${prePrePeakStateCurrent ? 'ON' : 'OFF'}.`);
+    this.log.info(`Hydro-Quebec ${this.prePeakHandler?.getPeriodType()} state is ${prePeakStateCurrent ? 'ON' : 'OFF'}.`);
+    this.log.info(`Hydro-Quebec ${this.peakHandler?.getPeriodType()} state is ${peakStateCurrent ? 'ON' : 'OFF'}.`);
 
     // 1st run all ON -> OFF transitions, and run them in Pre-Pre-Peak, Pre-Peak, Peak sequence
     if (prePrePeakStateCurrent && !prePrePeakStateHq) {
@@ -217,5 +223,14 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
       await this.peakHandler?.updateState();
       await setTimeout(10);
     }
+
+    const peakStateAfter = await this.peakHandler?.getOn();
+    const prePeakStateAfter = await this.prePeakHandler?.getOn();
+    const prePrePeakStateAfter = await this.prePrePeakHandler?.getOn();
+
+    this.log.info('Hydro-Quebec virtual switches processing END - state AFTER processing');
+    this.log.info(`Hydro-Quebec ${this.prePrePeakHandler?.getPeriodType()} state is ${prePrePeakStateAfter ? 'ON' : 'OFF'}.`);
+    this.log.info(`Hydro-Quebec ${this.prePeakHandler?.getPeriodType()} state is ${prePeakStateAfter ? 'ON' : 'OFF'}.`);
+    this.log.info(`Hydro-Quebec ${this.peakHandler?.getPeriodType()} state is ${peakStateAfter ? 'ON' : 'OFF'}.`);
   }
 }
