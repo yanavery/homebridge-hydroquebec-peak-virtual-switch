@@ -44,7 +44,7 @@ export type PeriodDefinition = {
 export const periodDefinitions: { [key in PeriodType]: PeriodDefinition[] } = {
   // peak period
   [PeriodType.PEAK]: [
-    { schedule: Schedule.AM, begin: { hours: 6, minutes: 0 }, end: { hours: 9, minutes: 0 } },
+    { schedule: Schedule.AM, begin: { hours: 6, minutes: 0 }, end: { hours: 10, minutes: 0 } },
     { schedule: Schedule.PM, begin: { hours: 16, minutes: 0 }, end: { hours: 20, minutes: 0 } },
   ],
 

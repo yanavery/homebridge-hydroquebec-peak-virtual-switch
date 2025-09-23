@@ -31,7 +31,7 @@ All 3 virtual switches will update themselves using the following schedule:
 - On Homebridge plug-in startup
 
 - Every day at 06:00 EST (peak AM begin)
-- Every day at 09:00 EST (peak AM end)
+- Every day at 10:00 EST (peak AM end)
 - Every day at 00:00 EST (pre-peak AM begin)
 - Every day at 05:59 EST (pre-peak AM end)
 - Every day at 21:00 EST (pre-pre-peak AM begin)
