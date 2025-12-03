@@ -1,5 +1,10 @@
 import moment from 'moment-timezone';
-import { CoreLogging, HydroQuebecIntegration, HydroQuebecPeakData, PeriodType } from '../hydro';
+import {
+  CoreLogging,
+  HydroQuebecIntegration,
+  HydroQuebecPeakData,
+  PeriodType,
+} from '../hydro';
 
 describe('HydroQuebecIntegration', () => {
   let hydroQuebecIntegration: HydroQuebecIntegration;
@@ -10,69 +15,43 @@ describe('HydroQuebecIntegration', () => {
     debug: jest.fn(),
   };
 
-  const sampleData: { results: HydroQuebecPeakData[] } = {
-    results: [
-      {
-        offre:'CPC-D',
-        datedebut:'2025-01-16T11:00:00+00:00', // 1/16 @ 6am EST
-        datefin:'2025-01-16T15:00:00+00:00', // 1/16 @ 10am EST
-        plagehoraire:'AM',
-        duree:'PT03H00MS',
-        secteurclient:'Residentiel',
-      },
-      {
-        offre: 'CPC-D',
-        datedebut: '2025-01-20T21:00:00+00:00', // 1/20 @ 4pm EST
-        datefin: '2025-01-21T01:00:00+00:00', // 1/20 @ 8pm EST
-        plagehoraire: 'PM',
-        duree: 'PT04H00MS',
-        secteurclient: 'Residentiel',
-      },
-      {
-        offre:'CPC-D',
-        datedebut:'2025-01-22T11:00:00+00:00', // 1/22 @ 6am EST
-        datefin:'2025-01-22T15:00:00+00:00', // 1/22 @ 10am EST
-        plagehoraire:'AM',
-        duree:'PT03H00MS',
-        secteurclient:'Residentiel',
-      },
-      {
-        offre: 'CPC-D',
-        datedebut: '2025-01-22T21:00:00+00:00', // 1/22 @ 4pm EST
-        datefin: '2025-01-23T01:00:00+00:00', // 1/22 @ 8pm EST
-        plagehoraire: 'PM',
-        duree: 'PT04H00MS',
-        secteurclient: 'Residentiel',
-      },
-      {
-        offre:'CPC-D',
-        datedebut:'2025-01-23T11:00:00+00:00', // 1/23 @ 6am EST
-        datefin:'2025-01-23T15:00:00+00:00', // 1/23 @ 10am EST
-        plagehoraire:'AM',
-        duree:'PT03H00MS',
-        secteurclient:'Residentiel',
-      },
-      {
-        offre:'CPC-D',
-        datedebut:'2025-01-23T21:00:00+00:00', // 1/23 @ 4pm EST
-        datefin:'2025-01-24T01:00:00+00:00', // 1/23 @ 8pm EST
-        plagehoraire:'PM',
-        duree:'PT03H00MS',
-        secteurclient:'Residentiel',
-      },
-      {
-        offre:'CPC-D',
-        datedebut:'2025-03-02T21:00:00+00:00', // 3/2 @ 4pm EST
-        datefin:'2025-03-03T01:00:00+00:00', // 3/2 @ 8pm EST
-        plagehoraire:'PM',
-        duree:'PT03H00MS',
-        secteurclient:'Residentiel',
-      },
-    ],
-  };
+  const sampleData: HydroQuebecPeakData[] = [
+    {
+      datedebut:'2025-01-16T11:00:00+00:00', // 1/16 @ 6am EST
+      datefin:'2025-01-16T15:00:00+00:00', // 1/16 @ 10am EST
+    },
+    {
+      datedebut: '2025-01-20T21:00:00+00:00', // 1/20 @ 4pm EST
+      datefin: '2025-01-21T01:00:00+00:00', // 1/20 @ 8pm EST
+    },
+    {
+      datedebut:'2025-01-22T11:00:00+00:00', // 1/22 @ 6am EST
+      datefin:'2025-01-22T15:00:00+00:00', // 1/22 @ 10am EST
+    },
+    {
+      datedebut: '2025-01-22T21:00:00+00:00', // 1/22 @ 4pm EST
+      datefin: '2025-01-23T01:00:00+00:00', // 1/22 @ 8pm EST
+    },
+    {
+      datedebut:'2025-01-23T11:00:00+00:00', // 1/23 @ 6am EST
+      datefin:'2025-01-23T15:00:00+00:00', // 1/23 @ 10am EST
+    },
+    {
+      datedebut:'2025-01-23T21:00:00+00:00', // 1/23 @ 4pm EST
+      datefin:'2025-01-24T01:00:00+00:00', // 1/23 @ 8pm EST
+    },
+    {
+      datedebut:'2025-03-02T21:00:00+00:00', // 3/2 @ 4pm EST
+      datefin:'2025-03-03T01:00:00+00:00', // 3/2 @ 8pm EST
+    },
+  ];
 
   beforeEach(() => {
-    hydroQuebecIntegration = new HydroQuebecIntegration(mockedLogger);
+    hydroQuebecIntegration = new HydroQuebecIntegration(mockedLogger, {
+      platform: 'HydroQuebecPeakVirtualSwitch',
+      sinopeUsername: 'testuser',
+      sinopePassword: 'testpassword',
+    });
   });
 
   it('should return unique cron schedules', () => {

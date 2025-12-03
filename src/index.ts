@@ -26,7 +26,11 @@ export default (api: API) => {
 //     },
 //   });
 
-//   const hydro = new HydroQuebecIntegration(logger);
+//   const hydro = new HydroQuebecIntegration(logger, {
+//     platform: 'HydroQuebecPeakVirtualSwitch',
+//     sinopeUsername: process.env.SINOPE_USERNAME || '',
+//     sinopePassword: process.env.SINOPE_PASSWORD || '',
+//   });
 //   await hydro.getState(PeriodType.PEAK).then((state) => {
 //     logger.info(`Current Hydro-Quebec peak state: ${state}`);
 //   });

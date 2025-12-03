@@ -11,6 +11,17 @@
         "type": "string",
         "required": true,
         "default": "Hydro-Quebec Peak Virtual Switch"
+      },
+      "sinopeUsername": {
+        "title": "Sinope username",
+        "type": "string",
+        "description": "Username for Sinope / Neviweb login"
+      },
+      "sinopePassword": {
+        "title": "Sinope password",
+        "type": "string",
+        "format": "password",
+        "description": "Password for Sinope / Neviweb login"
       }
     }
   }

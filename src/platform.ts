@@ -5,6 +5,11 @@ import { HydroQuebecPeakVirtualSwitchAccessory } from './platformAccessory.js';
 import { HydroQuebecIntegration, PeriodType } from './hydro.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
+export type PeakVirtualSwitchPlatformConfig = PlatformConfig & {
+  sinopeUsername: string;
+  sinopePassword: string;
+};
+
 /**
  * HomebridgePlatform
  * This class is the main constructor for your plugin, this is where you should
@@ -40,8 +45,8 @@ export class HydroQuebecPeakVirtualSwitchPlatform implements DynamicPlatformPlug
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
 
-    // set the hydro-quebec integration
-    this.hydro = new HydroQuebecIntegration(this.log);
+    // set the hydro-quebec integration (pass platform config for credentials)
+    this.hydro = new HydroQuebecIntegration(this.log, this.config as PeakVirtualSwitchPlatformConfig);
 
     this.log.debug('Finished initializing platform:', this.config.name);
 

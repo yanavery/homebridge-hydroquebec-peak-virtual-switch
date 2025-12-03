@@ -1,4 +1,7 @@
 import moment from 'moment-timezone';
+import { PeekDataProviderHydro } from './dataProviderHydro.js';
+import { PeekDataProviderSinope } from './dataProviderSinope.js';
+import { PeakVirtualSwitchPlatformConfig } from './platform.js';
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const APRIL = 3; // 0-based
@@ -11,12 +14,8 @@ const SEASON_END_MONTH = APRIL;
 const SEASON_END_DAY = 31;
 
 export type HydroQuebecPeakData = {
-  offre: string;
   datedebut: string;
   datefin: string;
-  plagehoraire: 'AM' | 'PM';
-  duree: string;
-  secteurclient: string;
 }
 
 export enum PeriodType {
@@ -72,11 +71,23 @@ export interface CoreLogging {
   debug: (message: string, ...parameters: any) => void;
 }
 
+export interface PeekDataProvider {
+  retrieveData(): Promise<HydroQuebecPeakData[]>;
+}
+
 export class HydroQuebecIntegration {
   private log: CoreLogging;
+  private dataProviderHydro: PeekDataProvider;
+  private dataProviderSinope: PeekDataProvider;
 
-  constructor(log: CoreLogging) {
+  constructor(log: CoreLogging, config: PeakVirtualSwitchPlatformConfig) {
     this.log = log;
+    this.dataProviderHydro = new PeekDataProviderHydro(log);
+    this.dataProviderSinope = new PeekDataProviderSinope(
+      log,
+      config.sinopeUsername,
+      config.sinopePassword,
+    );
   }
 
   // Extracts the CRON schedule for the pre/peak periods
@@ -101,11 +112,20 @@ export class HydroQuebecIntegration {
     }
 
     try {
-      const url = this.createURL();
-      const response = await this.json(url);
-      this.log.debug(`Raw data received from HQ: ${JSON.stringify(response)}`);
+      let peakData;
+      const hqData = await this.dataProviderHydro.retrieveData();
+      this.log.debug(`Data received from HQ: ${JSON.stringify(hqData)}`);
 
-      const state = await this.isCurrentlyWithinPeriod(response, periodType);
+      if(hqData.length > 0) {
+        peakData = hqData;
+      } else {
+        this.log.warn('No peak data retrieved from Hydro-Quebec API, trying Sinope API as fallback');
+        const sinopeData = await this.dataProviderSinope.retrieveData();
+        this.log.debug(`Data received from Sinope: ${JSON.stringify(sinopeData)}`);
+        peakData = sinopeData;
+      }
+
+      const state = await this.isCurrentlyWithinPeriod(peakData, periodType);
       return state;
     } catch (e) {
       this.log.error('error retrieving state', e);
@@ -113,35 +133,12 @@ export class HydroQuebecIntegration {
     }
   }
 
-  // Build URL to Hydro-Quebec API
-  private createURL() {
-    const u = new URL('https://donnees.hydroquebec.com/api/explore/v2.1/catalog/datasets/evenements-pointe/records');
-    u.searchParams.append('where', 'offre = "CPC-D"');
-    u.searchParams.append('order_by', 'datedebut desc');
-    u.searchParams.append('limit', '5');
-    return u.toString();
-  }
-
-  // Extract JSON response data from URL
-  async json(url: string) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error status: ${response.status}`);
-      }
-      return response.json();
-    } catch (e) {
-      this.log.error(`Failed to fetch JSON data at URL: ${url}`, e);
-      throw e;
-    }
-  }
-
   // Extract JSON data from Hydro-Quebec API response
-  async isCurrentlyWithinPeriod(json: {results: HydroQuebecPeakData[]}, periodType: PeriodType): Promise<boolean> {
+  async isCurrentlyWithinPeriod(data: HydroQuebecPeakData[], periodType: PeriodType): Promise<boolean> {
     const now = this.getNow();
 
-    if (json && json.results && json.results.length > 0) {
-      const allHqPeakItems = json.results;
+    if (data.length > 0) {
+      const allHqPeakItems = data;
       let isWithinPeriod = false;
       if (periodType === PeriodType.PRE_PRE_PEAK) {
         const isPeak = this.isDuringHqEvent(now, allHqPeakItems, PeriodType.PEAK);
