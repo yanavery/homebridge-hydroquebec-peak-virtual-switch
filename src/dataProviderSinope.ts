@@ -14,6 +14,10 @@ export class PeekDataProviderSinope implements PeekDataProvider {
   private readonly username: string;
   private readonly password: string;
   private sessionId: string | null = null;
+  private accountId: string | null = null;
+  private locationId: string | null = null;
+  private programId: string | null = null;
+  private programParticipantId: string | null = null;
 
   constructor(log: CoreLogging, username: string, password: string) {
     this.log = log;
@@ -23,14 +27,11 @@ export class PeekDataProviderSinope implements PeekDataProvider {
 
   // Retrieve peak data from Sinope API
   public async retrieveData(): Promise<HydroQuebecPeakData[]> {
-    if (!this.sessionId) {
-      const success = await this.login();
-      if (!success) {
-        return [];
-      }
+    const success = await this.initializeIdsIfNeeded();
+    if (!success) {
+      return [];
     }
-    const url = this.createURL();
-    const data = await this.fetchData(url);
+    const data = await this.fetchPeakEvents(this.programParticipantId!, this.programId!);
     return data && Array.isArray(data) ?
       data.map((item: SinopeData) => {
         // somehow, `startDateTime` is NOT correctly reported as a valid ISO date/time from Sinope, we
@@ -52,24 +53,116 @@ export class PeekDataProviderSinope implements PeekDataProvider {
       }) : [];
   }
 
-  // Build URL to Sinope API
-  private createURL() {
+  private async initializeIdsIfNeeded(): Promise<boolean> {
+    if (this.sessionId && this.accountId && this.locationId && this.programId && this.programParticipantId) {
+      return true;
+    }
+    let result = await this.login();
+    if (!result) {
+      return false;
+    }
+    result = await this.fetchLocation(this.accountId!);
+    if (!result) {
+      return false;
+    }
+    result = await this.fetchHQWinterCreditProgram(this.locationId!);
+    if (!result) {
+      return false;
+    }
+    result = await this.fetchProgramParticipant(this.locationId!, this.accountId!);
+    if (!result) {
+      return false;
+    }
+    return true;
+  }
+
+  private async fetchPeakEvents(programParticipantId: string, programId: string): Promise<SinopeData[]> {
+    this.log.debug(`Fetching peak events for program participant ID: '${programParticipantId}' & program ID: '${programId}'`);
+    const result = await this.fetchData(
+      this.createEventsUrl({ programParticipantId, programId }),
+      true, // try re-login on failure
+    );
+    this.log.debug(`Fetched peak events: ${JSON.stringify(result)}`);
+    return result as SinopeData[];
+  }
+
+  private createEventsUrl(params: { programParticipantId: string; programId: string; }) {
     const from = new Date();
     from.setDate(from.getDate() - 2); // 2 days ago
     const to = new Date();
     to.setDate(to.getDate() + 2); // upcoming 2 days
 
-    // ??? at the moment, not sure what the `11689` program participant ID is ???
-    const u = new URL('https://neviweb.com/api/program-participants/11689/events');
+    const u = new URL(`https://neviweb.com/api/program-participants/${params.programParticipantId}/events`);
     u.searchParams.append('embed', 'phases');
     u.searchParams.append('from', from.toISOString());
     u.searchParams.append('to', to.toISOString());
-    u.searchParams.append('program$id', '4'); // CPC-D program ID
+    u.searchParams.append('program$id', params.programId);
+    return u.toString();
+  }
+
+  private async fetchLocation(accountId: string): Promise<boolean> {
+    this.log.debug(`Fetching locations for account ID: '${accountId}'`);
+    const result = await this.fetchData(this.createLocationsUrl({ accountId }));
+    if (!result || !Array.isArray(result) || result.length <= 0 || result[0].id === undefined) {
+      this.log.error(`No locations found for Sinope account, data: ${JSON.stringify(result)}`);
+      return false;
+    }
+    this.locationId = result[0].id;
+    this.log.debug(`Found location ID: ${this.locationId}`);
+    return true;
+  }
+
+  private createLocationsUrl(params: { accountId: string }) {
+    const u = new URL('https://neviweb.com/api/locations');
+    u.searchParams.append('account$id', params.accountId);
+    return u.toString();
+  }
+
+  private async fetchHQWinterCreditProgram(locationId: string): Promise<boolean> {
+    this.log.debug(`Fetching HQ winter credit program for location ID: '${locationId}'`);
+    const result = await this.fetchData(this.createProgramsUrl({ locationId }));
+    if (!result || !Array.isArray(result) || result.length <= 0) {
+      this.log.error(`No programs found for location, data: ${JSON.stringify(result)}`);
+      return false;
+    }
+    const programs = result.filter((program) => program.ref === 'SINOPE-HQ-WINCR');
+    if (programs.length !== 1) {
+      this.log.error(`Exactly one program was expected, data: ${JSON.stringify(result)}`);
+      return false;
+    }
+    this.programId = programs[0].id;
+    this.log.debug(`Found HQ winter credit program ID: ${this.programId}`);
+    return true;
+  }
+
+  private createProgramsUrl(params: { locationId: string }) {
+    const u = new URL(`https://neviweb.com/api/location/${params.locationId}/programs`);
+    u.searchParams.append('embed', 'participantFieldDefinitions,filters');
+    return u.toString();
+  }
+
+  private async fetchProgramParticipant(locationId: string, accountId: string): Promise<boolean> {
+    this.log.debug(`Fetching program participant for location ID: '${locationId}' & account ID: '${accountId}'`);
+    const result = await this.fetchData(this.createProgramParticipantUrl({ locationId, accountId }));
+    if (!result || !Array.isArray(result) || result.length !== 1 || result[0].id === undefined) {
+      this.log.error(`Exactly one program participant was expected, data: ${JSON.stringify(result)}`);
+      return false;
+    }
+    this.programParticipantId = result[0].id;
+    this.log.debug(`Found program participant ID: ${this.programParticipantId}`);
+    return true;
+  }
+
+  private createProgramParticipantUrl(params: { locationId: string, accountId: string }) {
+    const u = new URL('https://neviweb.com/api/program-participants');
+    u.searchParams.append('embed', 'fieldValues,devices,devices.phases');
+    u.searchParams.append('location$id', params.locationId);
+    u.searchParams.append('account$id', params.accountId);
     return u.toString();
   }
 
   // Extract JSON response data from URL
-  private async fetchData(url: string, tryLoginOnFail: boolean = true): Promise<SinopeData[]> {
+  private async fetchData(url: string, tryLoginOnFail: boolean = false): Promise<unknown> {
     try {
       const response = await fetch(url, {
         method: 'GET',
@@ -94,7 +187,7 @@ export class PeekDataProviderSinope implements PeekDataProvider {
         if (!success) {
           return [];
         }
-        return this.fetchData(url, false);
+        return this.fetchData(url);
       }
       this.log.error(`Failed to fetch data at URL: '${url}', error: ${JSON.stringify(e)}`);
       return [];
@@ -129,11 +222,12 @@ export class PeekDataProviderSinope implements PeekDataProvider {
       }
 
       const data = await response.json();
-      if (!data || !data.session) {
+      if (!data || !data.session || !data.account || !data.account.id) {
         this.log.error(`Invalid login, response data: ${JSON.stringify(data)}`);
         return false;
       }
       this.sessionId = data.session;
+      this.accountId = data.account.id;
       this.log.info('Sinope login completed successfully');
       return true;
     } catch (e) {
